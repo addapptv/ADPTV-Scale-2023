@@ -6,7 +6,7 @@ public class InputHandler : MonoBehaviour
 {
     public static InputHandler instance { get; private set; }
 
-    [SerializeField] MovementController movementController;
+    [SerializeField] PlayerMover movementControl;
 
     public InputManager controls;
 
@@ -36,6 +36,7 @@ public class InputHandler : MonoBehaviour
         playerControls.Movement.performed += ctx => _moveInput = ctx.ReadValue<Vector2>();
         playerControls.Movement.canceled += ctx => _moveInput = ctx.ReadValue<Vector2>();*/
 
+
 /*        //Camera
         cameraControl.FreeLook.performed += ctx => _freeLookToggle = ctx.ReadValue<float>();
         cameraControl.FreeLook.canceled += ctx => _freeLookToggle = ctx.ReadValue<float>();
@@ -61,7 +62,7 @@ public class InputHandler : MonoBehaviour
         /*        _mousePosition = playerMovement.MousePos.ReadValue<Vector2>();*/
 
         _moveInput = playerControls.Movement.ReadValue<Vector2>();
-        movementController.ReceiveMoveInput(_moveInput);
+        movementControl.ReceiveMoveInput(_moveInput);
 /*        tPMovement.ReceiveFreeLook(_freeLookToggle);*/
 
     }

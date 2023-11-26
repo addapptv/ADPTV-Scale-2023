@@ -5,36 +5,48 @@ using UnityEngine;
 public class PlayerMover : MonoBehaviour
 {
 
+    public bool stickToGround = false;
+    public bool rotateToGround = false;
+    public bool movePlayer = true;
+    public bool rotateToMoveDirection= false;
+
+    public Camera playerCamera;
     [HideInInspector]
-    public Rigidbody Rigid;
+    public Rigidbody rb;
+    float xRotation;
 
     float delta;
-    public Vector2 _moveInput;
+    private Vector2 _moveInput;
+    private Vector3 _playerMoveInput;
+    private Vector3 _moveVector;
+
+    [Header("InputSmoothing")]
+    Vector3 _smoothInputVelocity;
+    [SerializeField]
+    float inputSmoothTime = 0.2f;
 
     [Header("Physics")]
-    private float gravityForce = 7.8f; //the gravity applied to our character
+    public float gravity = 7.8f; //the gravity applied to our character
 
     public LayerMask groundLayers; //what layers the ground can be
 
     [Header("Stats")]
-    public float Speed = 15f; //max speed for basic movement
-    public float Acceleration = 4f; //how quickly we build speed
+    public float speed = 25f; //max speed for basic movement
+    public float acceleration = 4f; //how quickly we build speed
     public float turnSpeed = 5f; //how quickly we turn/rotate player
     private Vector3 moveDirection, movepos, targetDir, groundDir; //where to move to
 
     private Quaternion playerRotation, groundRotation;
+    private Vector3 lookDirection;
 
-    private bool isGrounded = false;
+    public bool isGrounded;
     Vector3 groundAngle;
 
     void Awake()
     {
-        Rigid = GetComponent<Rigidbody>();
+        rb = GetComponent<Rigidbody>();
         groundDir = -transform.up;
         playerRotation = Quaternion.LookRotation(transform.forward, transform.up);
-
-/*        //detatch rigidbody so it can move freely 
-        Rigid.transform.parent = null;*/
     }
 
     void Update()
@@ -42,21 +54,31 @@ public class PlayerMover : MonoBehaviour
 
         delta = Time.deltaTime;
 
-        float Spd = Speed;
-
-
-        /*        transform.position = Rigid.position;*/
-
+        PlayerMoveInput();
         CheckGrounded();
 
-        GroundAngleCheck();
+        if (stickToGround)
+        {
+            ApplyDownforce();
+        }
 
-        MovePlayer(delta, Spd, Acceleration);
+        if (rotateToGround)
+        {
+            GroundAngleCheck();
+            RotateToGround(groundAngle);
+        }
 
-        /*        RotateSelf(groundAngle, delta);*/
+        if (movePlayer)
+        {
+            MovePlayer();
+        }
 
-        /*        RotatePlayer(playerRotation, groundRotation);*/
 
+        if (rotateToMoveDirection)
+        {
+            RotatePLayer();
+/*            RotateMesh(lookDirection);*/
+        }
 
     }
 
@@ -64,6 +86,12 @@ public class PlayerMover : MonoBehaviour
     public void ReceiveMoveInput(Vector2 input)
     {
         _moveInput = input;
+    }
+
+    void PlayerMoveInput()
+    {
+        _playerMoveInput = Vector3.SmoothDamp(_playerMoveInput, _moveInput, ref _smoothInputVelocity, inputSmoothTime);
+/*        _moveVector = new Vector3(_playerMoveInput.x, 0, _playerMoveInput.y);*/
     }
 
     //check the angle of the ground below the player
@@ -83,7 +111,7 @@ public class PlayerMover : MonoBehaviour
         {
             HitDir += HitFront.normal;
         }*/
-        if (Physics.Raycast(transform.position, -transform.up, out HitDown, 5f, groundLayers))
+        if (Physics.Raycast(transform.position, -transform.up, out HitDown, 20f, groundLayers))
         {
             hitNormal = HitDown.normal.normalized;
         }
@@ -103,9 +131,7 @@ public class PlayerMover : MonoBehaviour
     //check if the player is ground
     void CheckGrounded()
     {
-        RaycastHit hit;
-
-        if(Physics.Raycast(transform.position, groundDir, out hit, 1f, groundLayers))
+        if(Physics.Raycast(transform.position, -transform.up, 0.3f, groundLayers))
         {
             isGrounded = true;
         }
@@ -116,96 +142,38 @@ public class PlayerMover : MonoBehaviour
 
     }
 
-    //move player character
-    void MovePlayer(float delta, float speed, float acceleration)
+    void ApplyDownforce()
     {
-        
-        float _yMov = _moveInput.y;
-/*        float _xMov = _moveInput.x;*/
-        float gravityAmt;
-        float spd = speed;
-        
-        Vector3 currentVelocity = Rigid.velocity;
-
-/*        Vector3 h = transform.right * _xMov;*/
-        Vector3 v = transform.forward * _yMov;
-
-        Vector3 moveDirection = (v.normalized);
-        
-
-/*        if (_xMov == 0 && _yMov == 0)
-        {
-            targetDir = transform.forward;
-        }
-        else
-        {
-            targetDir = moveDirection;
-        }*/
-
-        //find values for turning player
-/*        Quaternion lookDir = Quaternion.LookRotation(targetDir);*/
-/*        Vector3 lookDir = targetDir;
-        float TurnSpd = turnSpeed;
-
-        groundDir = Vector3.Lerp(groundDir, groundAngle, delta * turnSpeed);*/
-
-
-        //set gravity if not grounded
         if (isGrounded)
         {
-            gravityAmt = 0f;
+            _moveVector.y = 0.0f;
         }
+
         else
         {
-            gravityAmt = gravityForce;
+            _moveVector.y = -gravity;
         }
-
-
-        //reduce speed if not inputting
-/*        if (_moveInput.x == 0 && _moveInput.y == 0)
-        {
-            //we are not moving, lerp to a walk speed
-            Spd = 0f;
-        }
-*/
-
-        //if we are not pressing a move input we move towards velocity
-       /* if (!MoveInput) 
-        {
-*//*            spd = speed * 0.8f; //less speed is applied to our character*//*
-            moveDirection = Vector3.Lerp(transform.forward, Rigid.velocity.normalized, 12f * delta);
-        }
-        else
-        {
-            moveDirection = transform.forward;
-        }*/
-
-/*        Vector3 targetVelocity = moveDirection * spd;*/
-        Vector3 targetVelocity;
-
-        //push downwards in downward direction of mesh (apply gravity)
-        targetVelocity = -groundAngle * gravityAmt;
-
-        //apply accelerate factor
-        Vector3 dir = Vector3.Lerp(currentVelocity, targetVelocity, delta * acceleration);
-        
-        Rigid.velocity = dir;
-
-/*        RotateSelf(groundAngle, delta);*/
-/*        RotateMesh(delta, lookDir, TurnSpd);*/
     }
 
-    //rotate player to the floor angle
-    void RotateSelf(Vector3 groundAngle, float delta)
+    void MovePlayer()
     {
-        Vector3 lerpDirection = Vector3.Lerp(transform.up, groundAngle, delta);
-/*        transform.rotation = Quaternion.FromToRotation(transform.up, lerpDirection) * transform.rotation;*/
+
+        Vector3 moveVector = transform.TransformDirection(_playerMoveInput) * speed;
+        rb.velocity = new Vector3(rb.velocity.x, rb.velocity.y, moveVector.y);
+
+
+    }
+
+    void RotateToGround(Vector3 groundAngle)
+    {
+        Vector3 lerpDirection = Vector3.Lerp(transform.up, groundAngle, 0.2f);
         groundRotation = Quaternion.FromToRotation(transform.up, lerpDirection) * transform.rotation;
+        
+        //TESTING//
         transform.rotation = groundRotation;
     }
     
-    //rotate player to the direction we face forwards
-    void RotateMesh(Vector3 lookDirection, float speed, float delta)
+    void RotateMesh(Vector3 lookDirection)
     {
         Quaternion slerpRotation = Quaternion.LookRotation(lookDirection, transform.up);
         /*        transform.rotation = Quaternion.Slerp(transform.rotation, slerpRotation, speed * d);*/
@@ -213,10 +181,13 @@ public class PlayerMover : MonoBehaviour
         transform.rotation = playerRotation;
     }
 
-    //move player character
-    void RotatePlayer(Quaternion playerRotation, Quaternion groundRotation)
+    void RotatePLayer()
     {
-        transform.rotation = groundRotation * playerRotation;
+        xRotation -= _playerMoveInput.x * turnSpeed;
+
+        transform.Rotate(0f, _playerMoveInput.x * turnSpeed, 0f);
+        playerCamera.transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
+
     }
 
 }

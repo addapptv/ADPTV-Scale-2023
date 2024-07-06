@@ -5,67 +5,80 @@ using UnityEngine;
 public class PlayerMover : MonoBehaviour
 {
 
+    public bool checkGrounded = false;
     public bool stickToGround = false;
+    public bool groundAngleCheck = false;
     public bool rotateToGround = false;
-    public bool movePlayer = true;
-    public bool rotateToMoveDirection= false;
+    public bool movePlayer = false;
+    public bool turnPlayer = false;
 
-    public Camera playerCamera;
+
+    [Header("Transforms")]
     [HideInInspector]
     public Rigidbody rb;
+    [SerializeField]
+    public Transform groundCheck;
+    
+    
     float xRotation;
+    float yRotation;
 
-    float delta;
+    [Header("Input")]
     private Vector2 _moveInput;
     private Vector3 _playerMoveInput;
-    private Vector3 _moveVector;
-
-    [Header("InputSmoothing")]
     Vector3 _smoothInputVelocity;
     [SerializeField]
     float inputSmoothTime = 0.2f;
 
     [Header("Physics")]
-    public float gravity = 7.8f; //the gravity applied to our character
+    Vector3 moveForward;
+    public Vector3 moveDown;
+    public float gravity = 10f; //the gravity applied to our character
+    private float downForce;
 
     public LayerMask groundLayers; //what layers the ground can be
 
     [Header("Stats")]
-    public float speed = 25f; //max speed for basic movement
+    public float speed = 50f; //max speed for basic movement
     public float acceleration = 4f; //how quickly we build speed
-    public float turnSpeed = 5f; //how quickly we turn/rotate player
-    private Vector3 moveDirection, movepos, targetDir, groundDir; //where to move to
+    public float rotationSpeed = 3f; //how quickly we turn/rotate player
 
-    private Quaternion playerRotation, groundRotation;
-    private Vector3 lookDirection;
+    private Quaternion groundRotation;
 
     public bool isGrounded;
-    Vector3 groundAngle;
+    public Vector3 groundAngle;
 
     void Awake()
     {
         rb = GetComponent<Rigidbody>();
-        groundDir = -transform.up;
-        playerRotation = Quaternion.LookRotation(transform.forward, transform.up);
     }
 
     void Update()
     {
-
-        delta = Time.deltaTime;
-
         PlayerMoveInput();
-        CheckGrounded();
+    }
 
-        if (stickToGround)
+    void FixedUpdate()
+    {
+        
+        if (checkGrounded)
         {
-            ApplyDownforce();
+            CheckGrounded();
+        }
+
+        if (groundAngleCheck)
+        {
+            GroundAngleCheck();
         }
 
         if (rotateToGround)
         {
-            GroundAngleCheck();
             RotateToGround(groundAngle);
+        }
+
+        if (stickToGround)
+        {
+            ApplyDownforce();
         }
 
         if (movePlayer)
@@ -73,11 +86,9 @@ public class PlayerMover : MonoBehaviour
             MovePlayer();
         }
 
-
-        if (rotateToMoveDirection)
+        if (turnPlayer)
         {
-            RotatePLayer();
-/*            RotateMesh(lookDirection);*/
+            RotatePlayer();
         }
 
     }
@@ -88,50 +99,51 @@ public class PlayerMover : MonoBehaviour
         _moveInput = input;
     }
 
+    //smooth player move input
     void PlayerMoveInput()
     {
         _playerMoveInput = Vector3.SmoothDamp(_playerMoveInput, _moveInput, ref _smoothInputVelocity, inputSmoothTime);
-/*        _moveVector = new Vector3(_playerMoveInput.x, 0, _playerMoveInput.y);*/
     }
 
     //check the angle of the ground below the player
-    private void GroundAngleCheck()
+    void GroundAngleCheck()
     {
-/*        RaycastHit HitFront;*/
+        RaycastHit HitFront;
         RaycastHit HitDown;
-        /*        RaycastHit HitBack;*/
 
-        /*        Physics.Raycast(transform.position, transform.forward, out HitFront, 2f, groundLayers);*/
+        Vector3 downHitNormal;
+        Vector3 frontHitNormal;
 
-        /*        Physics.Raycast(transform.position, -transform.forward, out HitBack, 2f, groundLayers);*/
 
-        Vector3 hitNormal;
-
-/*        if (HitFront.transform != null)
+        if (Physics.Raycast(transform.position, transform.forward, out HitFront, 2f, groundLayers))
         {
-            HitDir += HitFront.normal;
-        }*/
-        if (Physics.Raycast(transform.position, -transform.up, out HitDown, 20f, groundLayers))
-        {
-            hitNormal = HitDown.normal.normalized;
+            frontHitNormal = HitFront.normal.normalized;
         }
-        /*        if (HitBack.transform != null)
-                {
-                    HitDir += HitBack.normal;
-                }*/
+
         else
         {
-            hitNormal = transform.up;
+            frontHitNormal = Vector3.zero;
         }
 
-        groundAngle = hitNormal.normalized;
+        if (Physics.Raycast(transform.position, -transform.up, out HitDown, 20f, groundLayers))
+        {
+            downHitNormal = HitDown.normal.normalized;
+        }
+
+        else
+        {
+            downHitNormal = transform.up;
+        }
+
+
+        groundAngle = downHitNormal.normalized + frontHitNormal.normalized;
 
     }
 
-    //check if the player is ground
+    //check if the player is on the ground
     void CheckGrounded()
     {
-        if(Physics.Raycast(transform.position, -transform.up, 0.3f, groundLayers))
+        if (Physics.CheckSphere(groundCheck.position, .2f, groundLayers))
         {
             isGrounded = true;
         }
@@ -142,51 +154,66 @@ public class PlayerMover : MonoBehaviour
 
     }
 
+    //apply force downwards
     void ApplyDownforce()
     {
+
+        Vector3 down = -transform.up;
+
         if (isGrounded)
         {
-            _moveVector.y = 0.0f;
+            downForce = 0.0f;
         }
 
         else
         {
-            _moveVector.y = -gravity;
+            downForce = gravity;
         }
+
+        moveDown = down * downForce;
+
+
     }
 
+    //apply player movement
     void MovePlayer()
     {
 
-        Vector3 moveVector = transform.TransformDirection(_playerMoveInput) * speed;
-        rb.velocity = new Vector3(rb.velocity.x, rb.velocity.y, moveVector.y);
+        Vector3 forward = transform.forward;
+        forward.y = 0f;
+        forward.Normalize();
 
+        Vector3 desiredMoveDirection = forward * _moveInput.y;
+
+        {
+            if (desiredMoveDirection != Vector3.zero)
+            {
+                Quaternion toRotation = Quaternion.LookRotation(desiredMoveDirection, Vector3.up);
+                transform.rotation = Quaternion.RotateTowards(transform.rotation, toRotation, rotationSpeed * Time.deltaTime);
+            }
+
+            moveForward = desiredMoveDirection * speed;
+            
+            rb.velocity = moveForward + moveDown;
+        }
 
     }
 
+    //rotate player to ground normal
     void RotateToGround(Vector3 groundAngle)
     {
-        Vector3 lerpDirection = Vector3.Lerp(transform.up, groundAngle, 0.2f);
-        groundRotation = Quaternion.FromToRotation(transform.up, lerpDirection) * transform.rotation;
-        
-        //TESTING//
-        transform.rotation = groundRotation;
+        Vector3 lerpedGroundAngle = Vector3.Lerp(transform.up, groundAngle, 0.5f);
+
+        groundRotation = Quaternion.FromToRotation(transform.up, lerpedGroundAngle) * transform.rotation;
+        transform.rotation = Quaternion.Lerp(transform.rotation, groundRotation, rotationSpeed);
     }
     
-    void RotateMesh(Vector3 lookDirection)
+    //rotate player to 
+    void RotatePlayer()
     {
-        Quaternion slerpRotation = Quaternion.LookRotation(lookDirection, transform.up);
-        /*        transform.rotation = Quaternion.Slerp(transform.rotation, slerpRotation, speed * d);*/
-        playerRotation = Quaternion.Slerp(transform.rotation, slerpRotation, speed * delta);
-        transform.rotation = playerRotation;
-    }
+        xRotation -= _playerMoveInput.x * rotationSpeed;
 
-    void RotatePLayer()
-    {
-        xRotation -= _playerMoveInput.x * turnSpeed;
-
-        transform.Rotate(0f, _playerMoveInput.x * turnSpeed, 0f);
-        playerCamera.transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
+        transform.Rotate(0f, _playerMoveInput.x * rotationSpeed, 0f);
 
     }
 
